@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Channels;
@@ -20,24 +21,22 @@ public class OpcUaClient : IDisposable
 
     public async Task<DataValue> ReadTagValue(string tag, CancellationToken cancellationToken)
     {
-        var session = await EnsureConnected();
+        var session = await EnsureConnected(cancellationToken);
         var nodeId = NodeId.Parse(tag);
         var value = await session.ReadValueAsync(nodeId, cancellationToken);
         return new DataValue(value);
     }
 
-    public async IAsyncEnumerable<DataValue> WatchTagValue(string tag, CancellationToken cancellationToken)
+    public async IAsyncEnumerable<DataValue> WatchTagValue(string tag, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var session = await EnsureConnected();
-        var subscription = await EnsureSubscriptionCreated(session);
+        var session = await EnsureConnected(cancellationToken);
+        var subscription = await EnsureSubscriptionCreated(session, cancellationToken);
 
         var nodeId = NodeId.Parse(tag);
         var monitoredItem = new MonitoredItem
         {
             StartNodeId = nodeId
         };
-
-        subscription.AddItem(monitoredItem);
 
         var values = Channel.CreateBounded<OpcDataValue>(100);
         monitoredItem.Notification += (item, args) =>
@@ -48,6 +47,9 @@ public class OpcUaClient : IDisposable
                 values.Writer.WriteAsync(newValue, cancellationToken).GetAwaiter().GetResult();
             }
         };
+
+        subscription.AddItem(monitoredItem);
+        await subscription.ApplyChangesAsync(cancellationToken);
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -63,7 +65,7 @@ public class OpcUaClient : IDisposable
         _session?.Dispose();
     }
 
-    private async Task<Subscription> EnsureSubscriptionCreated(Session session)
+    private async Task<Subscription> EnsureSubscriptionCreated(Session session, CancellationToken cancellationToken)
     {
         if (session.DefaultSubscription != null)
         {
@@ -72,27 +74,28 @@ public class OpcUaClient : IDisposable
 
         var subscription = new Subscription
         {
+            PublishingInterval = 1000,
             PublishingEnabled = true
         };
         session.AddSubscription(subscription);
         session.DefaultSubscription = subscription;
-        await subscription.CreateAsync();
+        await subscription.CreateAsync(cancellationToken);
         return subscription;
     }
 
-    private async Task<Session> EnsureConnected()
+    private async Task<Session> EnsureConnected(CancellationToken cancellationToken)
     {
         if (_session == null)
         {
-            _session = await CreateNewSession();
+            _session = await CreateNewSession(cancellationToken);
         }
 
         return _session;
     }
 
-    private async Task<Session> CreateNewSession()
+    private async Task<Session> CreateNewSession(CancellationToken cancellationToken)
     {
-        var applicationConfiguration = await CreateApplicationConfiguration();
+        var applicationConfiguration = await CreateApplicationConfiguration(cancellationToken);
         var endpointConfiguration = EndpointConfiguration.Create(applicationConfiguration);
         var endpointDescription = CoreClientUtils.SelectEndpoint(_endpoint, false);
         var endpoint = new ConfiguredEndpoint(null, endpointDescription, endpointConfiguration);
@@ -109,7 +112,7 @@ public class OpcUaClient : IDisposable
             null);
     }
 
-    private async Task<ApplicationConfiguration> CreateApplicationConfiguration()
+    private async Task<ApplicationConfiguration> CreateApplicationConfiguration(CancellationToken cancellationToken)
     {
         var applicationConfiguration = new ApplicationConfiguration
         {
