@@ -27,7 +27,7 @@ public class CommandHandler : ICommandHandler
 
         var command = (CommandBase)serviceProvider.GetRequiredService(_commandType);
 
-        var results = command.Execute();
+        var results = command.Execute(context.GetCancellationToken());
         await ProcessResults(context, serviceProvider, results);
 
         return 0;

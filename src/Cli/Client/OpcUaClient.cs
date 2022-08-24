@@ -1,7 +1,10 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading.Channels;
 using Opc.Ua;
 using Opc.Ua.Client;
+using OpcDataValue = Opc.Ua.DataValue;
 
 namespace Balakin.Opc.Ua.Cli.Client;
 
@@ -15,17 +18,65 @@ public class OpcUaClient : IDisposable
         _endpoint = endpoint;
     }
 
-    public async Task<object> ReadTagValue(string tag)
+    public async Task<DataValue> ReadTagValue(string tag, CancellationToken cancellationToken)
     {
         var session = await EnsureConnected();
-        var nodeId = new NodeId(tag);
-        var value = await session.ReadValueAsync(nodeId);
+        var nodeId = NodeId.Parse(tag);
+        var value = await session.ReadValueAsync(nodeId, cancellationToken);
         return new DataValue(value);
+    }
+
+    public async IAsyncEnumerable<DataValue> WatchTagValue(string tag, CancellationToken cancellationToken)
+    {
+        var session = await EnsureConnected();
+        var subscription = EnsureSubscriptionCreated(session);
+
+        var nodeId = NodeId.Parse(tag);
+        var monitoredItem = new MonitoredItem
+        {
+            StartNodeId = nodeId
+        };
+
+        subscription.AddItem(monitoredItem);
+
+        var values = Channel.CreateBounded<OpcDataValue>(100);
+        monitoredItem.Notification += (item, args) =>
+        {
+            var newValues = item.DequeueValues();
+            foreach (var newValue in newValues)
+            {
+                values.Writer.WriteAsync(newValue, cancellationToken).GetAwaiter().GetResult();
+            }
+        };
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var value = await values.Reader.ReadAsync(cancellationToken);
+            yield return new DataValue(value);
+        }
+
+        subscription.RemoveItem(monitoredItem);
     }
 
     public void Dispose()
     {
         _session?.Dispose();
+    }
+
+    private Subscription EnsureSubscriptionCreated(Session session)
+    {
+        if (session.DefaultSubscription != null)
+        {
+            return session.DefaultSubscription;
+        }
+
+        var subscription = new Subscription
+        {
+            PublishingEnabled = true
+        };
+        session.AddSubscription(subscription);
+        session.DefaultSubscription = subscription;
+        return subscription;
     }
 
     private async Task<Session> EnsureConnected()

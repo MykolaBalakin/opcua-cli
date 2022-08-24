@@ -7,5 +7,5 @@ namespace Balakin.CommandLine;
 [CommandOption(typeof(XPathArgument), IsRequired = false)]
 public abstract class CommandBase
 {
-    public abstract IAsyncEnumerable<CommandResult> Execute();
+    public abstract IAsyncEnumerable<CommandResult> Execute(CancellationToken cancellationToken);
 }
