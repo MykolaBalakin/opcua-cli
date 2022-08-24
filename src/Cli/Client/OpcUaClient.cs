@@ -71,6 +71,7 @@ public class OpcUaClient : IDisposable
         var subscription = session.DefaultSubscription;
         if (!subscription.Created)
         {
+            session.AddSubscription(subscription);
             await subscription.CreateAsync(cancellationToken);
         }
 
