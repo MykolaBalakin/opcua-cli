@@ -35,6 +35,7 @@ public class OpcUaClient : IDisposable
         var nodeId = NodeId.Parse(tag);
         var monitoredItem = new MonitoredItem
         {
+            SamplingInterval = 1000,
             StartNodeId = nodeId
         };
 
