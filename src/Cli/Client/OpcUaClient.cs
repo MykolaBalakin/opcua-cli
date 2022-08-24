@@ -68,19 +68,12 @@ public class OpcUaClient : IDisposable
 
     private async Task<Subscription> EnsureSubscriptionCreated(Session session, CancellationToken cancellationToken)
     {
-        if (session.DefaultSubscription != null)
+        var subscription = session.DefaultSubscription;
+        if (!subscription.Created)
         {
-            return session.DefaultSubscription;
+            await subscription.CreateAsync(cancellationToken);
         }
 
-        var subscription = new Subscription
-        {
-            PublishingInterval = 1000,
-            PublishingEnabled = true
-        };
-        session.AddSubscription(subscription);
-        session.DefaultSubscription = subscription;
-        await subscription.CreateAsync(cancellationToken);
         return subscription;
     }
 
