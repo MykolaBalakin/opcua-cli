@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using Balakin.CommandLine;
 using Balakin.CommandLine.Output;
 using Balakin.Opc.Ua.Cli.Arguments;
@@ -23,13 +25,34 @@ public class WatchTagCommand : TagCommandBase
         _client = client;
     }
 
-    public override async IAsyncEnumerable<CommandResult> Execute(CancellationToken cancellationToken)
+    public override async IAsyncEnumerable<CommandResult> Execute([EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var tag = _tags.Value.Single();
-        var values = _client.WatchTagValue(tag, cancellationToken);
-        await foreach (var value in values)
+        var channel = Channel.CreateBounded<WatchTagResult>(100);
+        var tasks = new List<Task>();
+
+        foreach (var tag in _tags.Value)
         {
-            yield return CommandResult.Object(new WatchTagResult(tag, value));
+            var task = Task.Run(async () =>
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var values = _client.WatchTagValue(tag, cancellationToken);
+                    await foreach (var value in values.WithCancellation(cancellationToken))
+                    {
+                        var commandResult = new WatchTagResult(tag, value);
+                        await channel.Writer.WriteAsync(commandResult, cancellationToken);
+                    }
+                }
+            }, cancellationToken);
+            tasks.Add(task);
         }
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var result = await channel.Reader.ReadAsync(cancellationToken);
+            yield return CommandResult.Object(result);
+        }
+
+        await Task.WhenAll(tasks);
     }
 }
