@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Balakin.CommandLine;
 using Balakin.CommandLine.Output;
 using Balakin.Opc.Ua.Cli.Arguments;
@@ -23,7 +24,7 @@ public class ReadTagCommand : TagCommandBase
         _client = client;
     }
 
-    public override async IAsyncEnumerable<CommandResult> Execute(CancellationToken cancellationToken)
+    public override async IAsyncEnumerable<CommandResult> Execute([EnumeratorCancellation] CancellationToken cancellationToken)
     {
         foreach (var tag in _tags.Value)
         {
