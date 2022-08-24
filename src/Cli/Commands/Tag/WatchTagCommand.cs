@@ -13,7 +13,7 @@ public class WatchTagCommand : TagCommandBase
 {
     public record WatchTagResult(string Tag, DataValue Value)
     {
-        public override string ToString() => $"{Tag} = {Value}";
+        public override string ToString() => $"{Value.ServerTimestamp:s} {Tag} = {Value}";
     }
 
     private readonly TagsArgument _tags;
