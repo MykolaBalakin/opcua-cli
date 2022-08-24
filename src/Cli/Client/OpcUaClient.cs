@@ -29,7 +29,7 @@ public class OpcUaClient : IDisposable
     public async IAsyncEnumerable<DataValue> WatchTagValue(string tag, CancellationToken cancellationToken)
     {
         var session = await EnsureConnected();
-        var subscription = EnsureSubscriptionCreated(session);
+        var subscription = await EnsureSubscriptionCreated(session);
 
         var nodeId = NodeId.Parse(tag);
         var monitoredItem = new MonitoredItem
@@ -63,7 +63,7 @@ public class OpcUaClient : IDisposable
         _session?.Dispose();
     }
 
-    private Subscription EnsureSubscriptionCreated(Session session)
+    private async Task<Subscription> EnsureSubscriptionCreated(Session session)
     {
         if (session.DefaultSubscription != null)
         {
@@ -76,6 +76,7 @@ public class OpcUaClient : IDisposable
         };
         session.AddSubscription(subscription);
         session.DefaultSubscription = subscription;
+        await subscription.CreateAsync();
         return subscription;
     }
 
