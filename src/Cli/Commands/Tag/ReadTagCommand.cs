@@ -28,7 +28,22 @@ public class ReadTagCommand : TagCommandBase
     {
         foreach (var tag in _tags.Value)
         {
-            var value = await _client.ReadTagValue(tag, cancellationToken);
+            Exception exception=null;
+            try
+            {
+                var value = await _client.ReadTagValue(tag, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                exception = ex;
+
+            }
+
+            if (exception != null)
+            {
+                yield return CommandResult.Object(exception);
+            }
+
             var result = new ReadTagResult(tag, value);
             yield return CommandResult.Object(result);
         }
