@@ -29,7 +29,7 @@ public class ReadTagCommand : TagCommandBase
         foreach (var tag in _tags.Value)
         {
             Exception exception = null;
-            Object value = null;
+            DataValue value = null;
             try
             {
                 value = await _client.ReadTagValue(tag, cancellationToken);
